@@ -4,7 +4,7 @@ name: CD - Deploy to VM via Docker Compose
 on:
   push:
     tags:
-      - 'v*.*.*'
+      - 'v*.*.*'   # ex: v1.0.0
 
 jobs:
   deploy:
@@ -12,10 +12,12 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      - name: Set IMAGE tag
+
+      - name: Prepare IMAGE tag
         id: prep
         run: |
-          echo "IMAGE=ghcr.io/${{ github.repository_owner }}/spring-boot-ci-cd-demo:${{ github.ref_name }}" >> $GITHUB_OUTPUT
+          echo "IMAGE=docker.io/${{ secrets.DOCKER_USERNAME }}/spring-boot-ci-cd-demo:${{ github.ref_name }}" >> $GITHUB_OUTPUT
+
       - name: Connect & Deploy (SSH)
         uses: appleboy/ssh-action@v0.1.10
         with:
@@ -27,13 +29,20 @@ jobs:
             export IMAGE=${{ steps.prep.outputs.IMAGE }}
             mkdir -p ~/apps/spring-boot-ci-cd-demo
             cd ~/apps/spring-boot-ci-cd-demo
-            echo "version: '3'" > docker-compose.yml
-            echo "services:" >> docker-compose.yml
-            echo "  app:" >> docker-compose.yml
-            echo "    image: $IMAGE" >> docker-compose.yml
-            echo "    ports:" >> docker-compose.yml
-            echo "      - '8080:8080'" >> docker-compose.yml
-            echo "    environment:" >> docker-compose.yml
-            echo "      - SPRING_PROFILES_ACTIVE=prod" >> docker-compose.yml
+
+            cat > docker-compose.yml <<'YAML'
+            version: '3.8'
+            services:
+              app:
+                image: ${IMAGE}
+                container_name: spring-boot-ci-cd-demo
+                ports:
+                  - "8080:8080"
+                environment:
+                  - SPRING_PROFILES_ACTIVE=prod
+                restart: unless-stopped
+            YAML
+
             docker pull $IMAGE
             docker compose up -d
+            docker compose ps
